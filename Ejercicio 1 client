@@ -1,0 +1,71 @@
+//CLIENT
+
+C
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <netdb.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+ 
+#define TAM_BUFFER 20
+#define PUERTO_ESCUCHA 9999
+ 
+int conectar_servidor(const char *ip_servidor){
+    int desc_cliente;
+    struct sockaddr_in direccion_servidor;
+ 
+    desc_cliente = socket(AF_INET, SOCK_STREAM, 0);
+    if(desc_cliente < 0){
+        perror("Error. No se pudo crear socket");
+        return -1;
+    }
+ 
+    bzero((char *) &direccion_servidor, sizeof(direccion_servidor));
+    direccion_servidor.sin_port = htons(PUERTO_ESCUCHA);
+    direccion_servidor.sin_family = AF_INET;
+    direccion_servidor.sin_addr.s_addr = inet_addr(ip_servidor);
+ 
+    if(connect(desc_cliente, (struct sockaddr *) &direccion_servidor, sizeof(direccion_servidor)) < 0){
+        perror("Error. No se pudo conectar al socket");
+        close(desc_cliente);
+        return -1;
+    }
+    return desc_cliente;
+}
+ 
+void recibir_y_mostrar(int desc_cliente){
+    char buffer_datos[TAM_BUFFER];
+    ssize_t bytes_leidos;
+ 
+    do {
+        bytes_leidos = read(desc_cliente, buffer_datos, TAM_BUFFER - 1);
+        if(bytes_leidos > 0){
+            buffer_datos[bytes_leidos] = '\0';
+            printf("%s", buffer_datos);
+        }
+    } while(bytes_leidos > 0);
+ 
+    if(bytes_leidos < 0) {
+        perror("error al leer del socket");
+    }
+}
+ 
+int main(int num_argumentos, char *vector_argumentos[]){
+    int desc_cliente;
+ 
+    if(num_argumentos != 2){
+        fprintf(stderr, "Uso: %s <IP_del_servidor>\n", vector_argumentos[0]);
+        return 1;
+    }
+ 
+    desc_cliente = conectar_servidor(vector_argumentos[1]);
+    if(desc_cliente < 0) return 1;
+ 
+    recibir_y_mostrar(desc_cliente);
+    close(desc_cliente);
+    return 0;
+}
