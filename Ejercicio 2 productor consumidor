@@ -1,0 +1,134 @@
+
+const int N = 5;                           //tamaño del buffer
+const int ITEMS = 20;                 //datos que produce y consume
+
+const int PAUSA_PROD = 50;     //retardo del productor
+const int PAUSA_CONS = 400;   //retardo del consumidor
+
+int buffer[N];
+int entrada;                                  //siguiente posición donde escribir
+
+int salida;                                      //siguiente posicion de donde leer
+
+semaphore huecos;
+semaphore llenos;
+binarysem mutex;
+
+void retardo(int n)
+{
+  int k;
+  k = 0;
+  while (k < n)
+    k = k + 1;
+}
+
+void mostrar()
+{
+  int i;
+  cout << "[ ";
+  i = 0;
+4
+  while (i < N)
+  {
+    if (buffer[i] == 0)
+      cout << ". ";
+    else
+      cout << buffer[i] << " ";
+
+    i = i + 1;
+  }
+
+  cout << "]" << endl;
+}
+
+void productor()
+{
+  int i;
+  int dato;
+  i = 1;
+
+  while (i <= ITEMS)
+  {
+    dato = i;
+    retardo(PAUSA_PROD);
+
+    p(huecos);
+    p(mutex);
+
+    buffer[entrada] = dato;
+
+    cout << "Productor INSERTA " << dato
+         << " en pos " << entrada << " -> ";
+
+    entrada = entrada + 1;
+    if (entrada == N)
+      entrada = 0;
+
+    mostrar();
+
+    v(mutex);
+    v(llenos);
+
+    i = i + 1;
+  }
+}
+
+void consumidor()
+{
+  int i;
+  int dato;
+  i = 1;
+
+  while (i <= ITEMS)
+  {
+    p(llenos);
+    p(mutex);
+
+    dato = buffer[salida];
+    buffer[salida] = 0;
+
+    cout << "Consumidor RETIRA " << dato
+         << " de pos " << salida << " -> ";
+
+    salida = salida + 1;
+    if (salida == N)
+      salida = 0;
+
+    mostrar();
+
+    v(mutex);
+    v(huecos);
+
+    retardo(PAUSA_CONS);
+
+    i = i + 1;
+  }
+}
+
+main()
+{
+  int i;
+  i = 0;
+
+  while (i < N)
+  {
+    buffer[i] = 0;
+    i = i + 1;
+  }
+
+  entrada = 0;
+  salida = 0;
+
+  initialsem(huecos, N);
+  initialsem(llenos, 0);
+  initialsem(mutex, 1);
+
+  cobegin
+  {
+    productor();
+    consumidor();
+  }
+
+  cout << "Fin: se han producido y consumido "
+       << ITEMS << " datos" << endl;
+}
