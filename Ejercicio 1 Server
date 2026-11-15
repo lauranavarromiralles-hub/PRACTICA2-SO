@@ -1,0 +1,129 @@
+//SERVER
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
+
+#define TAM_BUFFER 20
+#define PUERTO_ESCUCHA 9999
+
+int crear_socket_escucha(void){
+	struct sockaddr_in direccion_servidor;
+	int desc_escucha,
+		activado = 1;
+
+	desc_escucha = socket(AF_INET, SOCK_STREAM, 0);
+	if(desc_escucha < 0){
+		perror("Error. No se pudo abrir el socket");
+		return -1;
+	}
+
+	bzero((char *) &direccion_servidor, sizeof(direccion_servidor));
+	direccion_servidor.sin_port = htons(PUERTO_ESCUCHA);
+	direccion_servidor.sin_family = AF_INET;
+	direccion_servidor.sin_addr.s_addr = INADDR_ANY;
+
+	setsockopt(desc_escucha, SOL_SOCKET, SO_REUSEADDR, &activado, sizeof(activado));
+
+	if(bind(desc_escucha, (struct sockaddr *) &direccion_servidor, sizeof(direccion_servidor)) < 0){
+		perror("Error no se pudo vincular el socket");
+		close(desc_escucha);
+		return -1;
+	}
+	if(listen(desc_escucha, 5) < 0){
+		perror("error en listen");
+		close(desc_escucha);
+		return -1;
+	}
+	return desc_escucha;
+}
+
+void enviar_fichero(int desc_conexion){
+	char buffer_datos[TAM_BUFFER];
+	ssize_t bytes_leidos, bytes_enviados, bytes_escritos;
+	int desc_archivo;
+
+	desc_archivo = open("Google.html", O_RDONLY);
+	if(desc_archivo < 0){
+		perror("error al abrir el fichero\n");
+		return;
+	}
+
+	bytes_leidos = read(desc_archivo, buffer_datos, TAM_BUFFER - 1);
+	while(bytes_leidos > 0){
+		printf("he leido del fichero un bloque de %zd\n", bytes_leidos);
+		bytes_enviados = 0;
+
+		while(bytes_enviados < bytes_leidos){
+			bytes_escritos = write(desc_conexion, buffer_datos + bytes_enviados, bytes_leidos - bytes_enviados);
+			if(bytes_escritos <= 0){
+				perror("error al enviar al cliente");
+				break;
+			}
+			bytes_enviados += bytes_escritos;
+		}
+
+		if(bytes_enviados < bytes_leidos) break;
+		bytes_leidos = read(desc_archivo, buffer_datos, TAM_BUFFER - 1);
+	}
+
+	if(bytes_leidos < 0) perror("error al leer el fichero");
+	printf("ya he acabado, tamaño del ultimo bloque leido %zd\n", bytes_leidos);
+	close(desc_archivo);
+}
+
+void atender_cliente(int desc_conexion){
+	printf("hijo acepta conexion\n");
+	enviar_fichero(desc_conexion);
+	printf("soy el que atendia la peticion, ya he acabado\n");
+	close(desc_conexion);
+	fflush(stdout);
+	_exit(0);
+}
+
+int main(void){
+	socklen_t longitud_dir;
+	struct sockaddr_in direccion_cliente;
+	int 	desc_escucha,
+		desc_conexion;
+	pid_t id_proceso;
+
+	desc_escucha = crear_socket_escucha();
+	if(desc_escucha < 0) return 1;
+
+	signal(SIGCHLD, SIG_IGN);
+	signal(SIGPIPE, SIG_IGN);
+
+	while(1){
+		longitud_dir = sizeof(direccion_cliente);
+		desc_conexion = accept(desc_escucha, (struct sockaddr *) &direccion_cliente, &longitud_dir);
+		if(desc_conexion < 0){
+			perror("error al aceptar la conexion");
+		} else {
+			printf("aceptando conexion\n");
+			fflush(stdout);
+
+			id_proceso = fork();
+
+			if(id_proceso == 0){
+				close(desc_escucha);
+				atender_cliente(desc_conexion);
+			}
+			else if(id_proceso > 0){
+				close(desc_conexion);
+			}
+			else {
+				perror("error en fork");
+				close(desc_conexion);
+			}
+		}
+	}
+	return 0;
+}
